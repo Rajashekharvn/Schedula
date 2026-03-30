@@ -1,25 +1,29 @@
-import NextAuth from "next-auth";
-import authConfig from "@/auth.config";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const { auth } = NextAuth(authConfig);
+// Pure cookie-based auth check — no NextAuth/Prisma imports
+// Keeps edge function well under Vercel's 1MB limit
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-export default auth((req) => {
-  const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
+  // NextAuth v5 sets one of these cookies for JWT sessions
+  const sessionToken =
+    req.cookies.get("authjs.session-token")?.value ??
+    req.cookies.get("__Secure-authjs.session-token")?.value;
+
+  const isLoggedIn = !!sessionToken;
 
   // Protect all /dashboard routes
-  if (nextUrl.pathname.startsWith("/dashboard") && !isLoggedIn) {
-    return NextResponse.redirect(new URL("/login", nextUrl));
+  if (pathname.startsWith("/dashboard") && !isLoggedIn) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  // Redirect authenticated users away from login/register
-  if ((nextUrl.pathname === "/login" || nextUrl.pathname === "/register") && isLoggedIn) {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+  // Redirect logged-in users away from login/register
+  if ((pathname === "/login" || pathname === "/register") && isLoggedIn) {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
