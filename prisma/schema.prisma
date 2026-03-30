@@ -1,0 +1,144 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String         @id @default(cuid())
+  name              String?
+  email             String         @unique
+  emailVerified     DateTime?
+  image             String?
+  password          String?
+  username          String?        @unique
+  bio               String?
+  timezone          String         @default("UTC")
+  googleAccessToken  String?       @db.Text
+  googleRefreshToken String?       @db.Text
+  googleTokenExpiry  DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  eventTypes        EventType[]
+  availability      Availability[]
+  dateOverrides     DateOverride[]
+  bookingsAsHost    Booking[]      @relation("HostBookings")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model EventType {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  slug        String
+  description String?
+  duration    Int       @default(30) // in minutes
+  color       String    @default("#6366f1")
+  isActive    Boolean   @default(true)
+  location    String?
+  bufferTime  Int       @default(0) // minutes before/after
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([userId, slug])
+}
+
+model Availability {
+  id        String   @id @default(cuid())
+  userId    String
+  dayOfWeek Int      // 0=Sunday, 1=Monday, ..., 6=Saturday
+  startTime String   // "HH:MM" in host's timezone
+  endTime   String   // "HH:MM" in host's timezone
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DateOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @db.Date
+  isBlocked Boolean  @default(true)
+  startTime String?  // if not blocked, custom hours
+  endTime   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  eventTypeId     String
+  hostId          String
+  guestName       String
+  guestEmail      String
+  guestTimezone   String        @default("UTC")
+  startTime       DateTime      // UTC
+  endTime         DateTime      // UTC
+  status          BookingStatus @default(CONFIRMED)
+  notes           String?
+  googleEventId   String?
+  cancelToken     String        @unique @default(cuid())
+  rescheduleToken String        @unique @default(cuid())
+  meetingLink     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  eventType EventType @relation(fields: [eventTypeId], references: [id], onDelete: Cascade)
+  host      User      @relation("HostBookings", fields: [hostId], references: [id], onDelete: Cascade)
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+}
